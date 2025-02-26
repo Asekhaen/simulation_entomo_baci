@@ -360,4 +360,31 @@ baci_maxlik <- opt(
 
 baci_maxlik
 
+### randomised quantile residuals
+
+log_weights
+
+log_weights_sim <- calculate(
+  log_weights,
+  values = draws,
+  nsim = 100
+)
+
+
+library(DHARMa)
+resids <- createDHARMa(
+  simulatedResponse = t(log_weights_sim$log_weights[,,1]),
+  observedResponse = data$log_weights
+)
+
+plot(resids)
+
+
+# can also convert to expected normality
+res <- resids$scaledResiduals
+hist(res, breaks = 100)
+
+res_normal <- qnorm(res)
+hist(res_normal)
+
 
