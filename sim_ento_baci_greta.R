@@ -41,12 +41,14 @@ inter_household_sd <- normal(
   sd = 0.5,
   truncation = c(0, Inf)
 )
+prior_hist(inter_household_sd)
 
 inter_month_sd  <- normal(
   mean = 0,
   sd = 0.5,
   truncation = c(0, Inf)
 )
+prior_hist(inter_month_sd)
 
 n_villages <- 8
 n_households_per_village <- 11
@@ -88,16 +90,37 @@ village_avg_wt_diffs <- normal(
   dim = n_villages
 )
 
+
+# # hierarchical decentralisation
+# village_avg_wt_diffs_raw <- normal(
+#   mean = 0,
+#   sd = 1,
+#   dim = n_villages
+# )
+# 
+# village_avg_wt_diffs <- village_avg_wt_diffs_raw * inter_village_sd
+
+
 unique_household_avg_wt_diffs <- normal(
   mean = 0,
   sd = inter_household_sd,
   dim = n_households_per_village*n_villages
 )
 
-n_months <- 6
+
+# # hierarchical decentralisation
+# unique_household_avg_wt_diffs_raw <- normal(
+#   mean = 0,
+#   sd = 1,
+#   dim = n_households_per_village*n_villages
+# )
+# 
+# unique_household_avg_wt_diffs <- unique_household_avg_wt_diffs_raw * inter_household_sd
+
 
 # # this is the version that does not end with a probability distribution
 # 
+# n_months <- 6
 # month_household_avg_wt_diffs <- normal(
 #   mean = 0,
 #   sd = inter_month_sd,
@@ -226,9 +249,12 @@ data <- ento_baci_data |>
 #   sd = inter_month_sd
 # )
 
+log_weights <- as_data(data$log_weights)
+
 # here we have our data being drawn from model distrubutions
-distribution(data$log_weights) <- normal(
+distribution(log_weights) <- normal(
   mean = intervention_log_weights_household,
+  #mean = nonintervention_log_weights_household,
   sd = inter_month_sd
 )
 
@@ -243,6 +269,36 @@ distribution(data$log_weights) <- normal(
 #   sd = inter_month_sd
 # )
 
+log_weights
+
+prior_sims <- calculate(
+  log_weights,
+  nsim = 1000
+)
+
+dim(prior_sims$log_weights)
+which_row <- 227
+
+data_point_prior_sims <- prior_sims$log_weights[,which_row,1]
+data_point_truth <- data$log_weights[which_row]
+mean(data_point_prior_sims < data_point_truth)
+
+hist(data_point_prior_sims)
+abline(v = data_point_truth)
+
+
+bayesplot::ppc_dens_overlay(
+  y = data$log_weights,
+  yrep = prior_sims$log_weights[,,1]
+)
+
+
+bayesplot::ppc_ecdf_overlay(
+  y = data$log_weights,
+  yrep = prior_sims$log_weights[,,1]
+)
+
+
 # create our model object
 baci_model <- model(
   #intervention_log_weights_household,
@@ -253,16 +309,27 @@ baci_model <- model(
   study_avg_wt
 )
 
+# plot(baci_model)
 
-plot(baci_model)
+# # 
+# inits <- initials(
+#   inter_month_sd = 10#,
+#   #inter_village_sd = 0.3,
+#   #inter_village_sd = 0.3,
+#   #study_avg_wt = 4000,
+#   #intervention_percent_reduction = 27
+# )
+
 
 draws <- mcmc(
   model = baci_model,
   n_samples = 1000,
-  thin = 1,
-  warmup = 2000,
-  chains = 5
+  warmup = 10000,
+  chains = 8#,
+  #initial_values = inits
 )
+
+
 
 library(bayesplot)
 mcmc_trace(
@@ -275,3 +342,22 @@ mcmc_trace(
     "inter_village_sd"
   )
 )
+
+# Rhat / Gelman-Rubin diagnostic / Potential scale reduction factor
+library(coda)
+gelman.diag(
+  x = draws,
+  autoburnin = FALSE
+)
+
+# fit summary
+summary(draws)
+
+# maximum likelihood
+baci_maxlik <- opt(
+  model = baci_model
+)
+
+baci_maxlik
+
+
