@@ -22,6 +22,11 @@ study_avg_wt <- normal(
   truncation = c(0, Inf)
 )
 
+# study_avg_wt <- uniform(
+#   min = 0,
+#   max = 10000
+# )
+
 prior_hist(study_avg_wt)
 
 inter_village_sd <- normal(
@@ -240,7 +245,7 @@ distribution(data$log_weights) <- normal(
 
 # create our model object
 baci_model <- model(
-  intervention_log_weights_household,
+  #intervention_log_weights_household,
   inter_month_sd,
   inter_household_sd,
   inter_village_sd,
@@ -254,8 +259,8 @@ plot(baci_model)
 draws <- mcmc(
   model = baci_model,
   n_samples = 1000,
-  thin = 5,
-  warmup = 5000,
+  thin = 1,
+  warmup = 2000,
   chains = 5
 )
 
@@ -264,6 +269,9 @@ mcmc_trace(
   x = draws,
   pars = c(
     "study_avg_wt",
-    "intervention_percent_reduction"
+    "intervention_percent_reduction",
+    "inter_month_sd",
+    "inter_household_sd",
+    "inter_village_sd"
   )
 )
