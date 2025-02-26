@@ -46,8 +46,6 @@ inter_month_sd  <- normal(
 n_villages <- 8
 n_households_per_village <- 11
 
-
-
 data_template <- expand_grid(
   village = seq_len(n_villages),
   household = seq_len(n_households_per_village),
@@ -92,14 +90,15 @@ unique_household_avg_wt_diffs <- normal(
 )
 
 n_months <- 6
-month_household_avg_wt_diffs <- normal(
-  mean = 0,
-  sd = inter_month_sd,
-  dim = n_months*n_villages*n_households_per_village
-)
-
 
 # # this is the version that does not end with a probability distribution
+# 
+# month_household_avg_wt_diffs <- normal(
+#   mean = 0,
+#   sd = inter_month_sd,
+#   dim = n_months*n_villages*n_households_per_village
+# )
+# 
 # 
 # nonintervention_log_weights <- log(study_avg_wt) +
 #   village_avg_wt_diffs[data_template$village] +
@@ -115,8 +114,10 @@ intervention_multiplier <- 1 - intervention_percent_reduction / 100
 # log_intervention_multiplier <- log(intervention_multiplier)
 
 # create a dummy variable for whether there is an effect of the intervention
-intervention_in_place <- as.numeric(data_template$before_after == "after" &
-                                      data_template$arm == "intervention")
+intervention_in_place <- as.numeric(
+  data_template$before_after == "after" &
+    data_template$arm == "intervention"
+)
 
 intervention_multiplier_vec <- (1 - intervention_in_place) +
   intervention_in_place * intervention_multiplier
@@ -136,16 +137,97 @@ nonintervention_log_weights_household <- log(study_avg_wt) +
 intervention_log_weights_household <- nonintervention_log_weights_household + 
   log_intervention_multiplier_vec
 
-log_weights_observations <- normal(
-  mean = intervention_log_weights_household,
-  sd = inter_month_sd
+# sims_new_way <- calculate(nonintervention_log_weights_observations[50],
+#                           nsim = 10000)
+# hist(sims_new_way$`nonintervention_log_weights_observations[50]`,
+#      breaks = 100)
+
+
+# this is useful for simulating data, but once we want to fit to data
+# it confuses out dag and is hanging superfulously onto our model, so we 
+# remove it for now
+# log_weights_observations <- normal(
+#   mean = intervention_log_weights_household,
+#   sd = inter_month_sd
+# )
+# 
+# 
+# m <- model(log_weights_observations)
+# 
+# plot(m)
+# 
+# simulated_log_weights <- calculate(log_weights_observations, nsim = 1)
+# 
+# 
+# sim_weights <- exp(unlist(simulated_log_weights))
+# 
+# sim_data <- data_template |>
+#   mutate(
+#     weight = sim_weights
+#   )
+# 
+# 
+# sim_data %>%
+#   mutate(
+#     intervened = arm == "intervention" & before_after == "after",
+#     before_after = factor(before_after,
+#                           levels = c("before", "after"))
+#   ) %>%
+#   ggplot(
+#     aes(
+#       x = weight,
+#       fill = intervened
+#     )
+#   ) +
+#   geom_histogram() +
+#   facet_grid(arm ~ before_after) +
+#   coord_flip()
+
+# read in real (simulated) data
+ento_baci_data <- read_csv(
+  file = "ento_baci_data.csv"
 )
 
-# distribution(data$log_weights) <- normal(
+plot_baci_data <- function(x){
+  x %>%
+    mutate(
+      intervened = arm == "intervention" & before_after == "after",
+      before_after = factor(before_after,
+                            levels = c("before", "after"))
+    ) %>%
+    ggplot(
+      aes(
+        x = weight,
+        fill = intervened
+      )
+    ) +
+    geom_histogram() +
+    facet_grid(arm ~ before_after) +
+    coord_flip()
+}
+
+plot_baci_data(ento_baci_data)
+
+
+data <- ento_baci_data |>
+  mutate(
+    log_weights = log(weight)
+  )
+
+
+# here we created a greta node for simulation
+# log_weights_observations <- normal(
 #   mean = intervention_log_weights_household,
 #   sd = inter_month_sd
 # )
 
+# here we have our data being drawn from model distrubutions
+distribution(data$log_weights) <- normal(
+  mean = intervention_log_weights_household,
+  sd = inter_month_sd
+)
+
+# alternative ways of feeding in the weights
 # distribution(log(data$weights)) <- normal(
 #   mean = intervention_log_weights_household,
 #   sd = inter_month_sd
@@ -156,95 +238,32 @@ log_weights_observations <- normal(
 #   sd = inter_month_sd
 # )
 
-# sims_new_way <- calculate(nonintervention_log_weights_observations[50],
-#                           nsim = 10000)
-# hist(sims_new_way$`nonintervention_log_weights_observations[50]`,
-#      breaks = 100)
+# create our model object
+baci_model <- model(
+  intervention_log_weights_household,
+  inter_month_sd,
+  inter_household_sd,
+  inter_village_sd,
+  intervention_percent_reduction,
+  study_avg_wt
+)
 
 
+plot(baci_model)
 
+draws <- mcmc(
+  model = baci_model,
+  n_samples = 1000,
+  thin = 5,
+  warmup = 5000,
+  chains = 5
+)
 
-
-
-nonintervention_weights <- exp(nonintervention_log_weights)
-
-m <- model(study_avg_wt, village_avg_wt_diffs)
-
-plot(m)
-prior_hist(nonintervention_weights[1])
-
-# check the prior density over one of the simulations
-
-sims <- calculate(nonintervention_weights[1], nsim = 10000)
-# hist(sims$`nonintervention_weights[1]`, breaks = 100,
-#      xlim = c(0, 50000))
-# mean(sims$`nonintervention_weights[1]` < 50000)
-
-data_template <- expand_grid(
-  village = seq_len(n_villages),
-  household = seq_len(n_households_per_village),
-  month = c(1:3, 13:15),
-  weight = NA
-) %>%
-  mutate(
-    before_after = case_when(
-      month %in% 1:3 ~ "before",
-      month %in% 13:15 ~ "after"
-    ),
-    arm = case_when(
-      village <= round(n_villages / 2) ~ "control",
-      .default = "intervention"
-    ),
-    .before = "weight"
-  ) %>%
-  mutate(
-    # make unique combinations of households and villages
-    household_village_combination = paste(village,
-                                          household,
-                                          sep = "-"),
-    unique_household = match(household_village_combination,
-                             unique(household_village_combination)),
-    .after = "household"
-  ) %>%
-  select(
-    -household_village_combination
+library(bayesplot)
+mcmc_trace(
+  x = draws,
+  pars = c(
+    "study_avg_wt",
+    "intervention_percent_reduction"
   )
-
-# 8x villages (difference from study average)
-village_avg_wt_diffs <- rnorm(n_villages,
-                              mean = 0,
-                              sd = inter_village_sd)
-
-# 64x households (difference from village average)
-unique_household_avg_wt_diffs <- rnorm(n_households_per_village * n_villages,
-                                       mean = 0,
-                                       sd = inter_household_sd)
-
-# 384 household-month trap records
-month_household_avg_wt_diffs <- rnorm(6 * n_households_per_village * n_villages,
-                                      mean = 0,
-                                      sd = inter_month_sd)
-
-# study average + correct village difference + correct household difference +
-# correct month difference
-
-nonintervention_log_weights <- log(study_avg_wt) +
-  village_avg_wt_diffs[data_template$village] +
-  unique_household_avg_wt_diffs[data_template$unique_household] +
-  month_household_avg_wt_diffs
-
-# apply convert percentage reduction
-intervention_multiplier <- 1 - intervention_percent_reduction / 100
-
-# create a dummy variable for whether there is an effect of the intervention
-intervention_in_place <- as.numeric(data_template$before_after == "after" &
-                                      data_template$arm == "intervention")
-
-intervention_multiplier_vec <- (1 - intervention_in_place) +
-  intervention_in_place * intervention_multiplier
-
-log_weights <- nonintervention_log_weights + log(intervention_multiplier_vec)
-
-weights <- exp(log_weights)
-
-data_template$weight <- weights
+)
