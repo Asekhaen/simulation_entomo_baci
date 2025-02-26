@@ -16,7 +16,7 @@ intervention_percent_reduction <- uniform(
 prior_hist(intervention_percent_reduction)
 
 
-study_avg_wt <-  normal(
+study_avg_wt <- normal(
   mean = 4000,
   sd = 3000,
   truncation = c(0, Inf)
@@ -26,20 +26,20 @@ prior_hist(study_avg_wt)
 
 inter_village_sd <- normal(
   mean = 0,
-  sd = 1,
+  sd = 0.5,
   truncation = c(0, Inf)
 )
 prior_hist(inter_village_sd)
 
 inter_household_sd <- normal(
   mean = 0,
-  sd = 1,
+  sd = 0.5,
   truncation = c(0, Inf)
 )
 
 inter_month_sd  <- normal(
   mean = 0,
-  sd = 1,
+  sd = 0.5,
   truncation = c(0, Inf)
 )
 
@@ -99,15 +99,86 @@ month_household_avg_wt_diffs <- normal(
 )
 
 
-nonintervention_log_weights <- log(study_avg_wt) +
+# # this is the version that does not end with a probability distribution
+# 
+# nonintervention_log_weights <- log(study_avg_wt) +
+#   village_avg_wt_diffs[data_template$village] +
+#   unique_household_avg_wt_diffs[data_template$unique_household] +
+#   month_household_avg_wt_diffs
+# 
+# sims_old_way <- calculate(nonintervention_log_weights[50],
+#                           nsim = 10000)
+# hist(sims_old_way$`nonintervention_log_weights[50]`,
+#      breaks = 100)
+
+intervention_multiplier <- 1 - intervention_percent_reduction / 100
+# log_intervention_multiplier <- log(intervention_multiplier)
+
+# create a dummy variable for whether there is an effect of the intervention
+intervention_in_place <- as.numeric(data_template$before_after == "after" &
+                                      data_template$arm == "intervention")
+
+intervention_multiplier_vec <- (1 - intervention_in_place) +
+  intervention_in_place * intervention_multiplier
+
+log_intervention_multiplier_vec <- log(intervention_multiplier_vec)
+
+# calculate(log_intervention_multiplier_vec,
+#           values = list(
+#             intervention_percent_reduction = 10))
+
+# this is the version that ends with a probability distribution (so that we can
+# define a likelihood over some data)
+nonintervention_log_weights_household <- log(study_avg_wt) +
   village_avg_wt_diffs[data_template$village] +
-  unique_household_avg_wt_diffs[data_template$unique_household] +
-  month_household_avg_wt_diffs
+  unique_household_avg_wt_diffs[data_template$unique_household]
+
+intervention_log_weights_household <- nonintervention_log_weights_household + 
+  log_intervention_multiplier_vec
+
+log_weights_observations <- normal(
+  mean = intervention_log_weights_household,
+  sd = inter_month_sd
+)
+
+# distribution(data$log_weights) <- normal(
+#   mean = intervention_log_weights_household,
+#   sd = inter_month_sd
+# )
+
+# distribution(log(data$weights)) <- normal(
+#   mean = intervention_log_weights_household,
+#   sd = inter_month_sd
+# )
+
+# distribution(data$weights) <- lognormal(
+#   mean = intervention_log_weights_household,
+#   sd = inter_month_sd
+# )
+
+# sims_new_way <- calculate(nonintervention_log_weights_observations[50],
+#                           nsim = 10000)
+# hist(sims_new_way$`nonintervention_log_weights_observations[50]`,
+#      breaks = 100)
+
+
+
+
+
 
 nonintervention_weights <- exp(nonintervention_log_weights)
 
-prior_hist(nonintervention_weights)
+m <- model(study_avg_wt, village_avg_wt_diffs)
 
+plot(m)
+prior_hist(nonintervention_weights[1])
+
+# check the prior density over one of the simulations
+
+sims <- calculate(nonintervention_weights[1], nsim = 10000)
+# hist(sims$`nonintervention_weights[1]`, breaks = 100,
+#      xlim = c(0, 50000))
+# mean(sims$`nonintervention_weights[1]` < 50000)
 
 data_template <- expand_grid(
   village = seq_len(n_villages),
