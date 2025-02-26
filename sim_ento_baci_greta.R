@@ -344,8 +344,8 @@ mcmc_trace(
 )
 
 # Rhat / Gelman-Rubin diagnostic / Potential scale reduction factor
-library(coda)
-gelman.diag(
+#library(coda)
+coda::gelman.diag(
   x = draws,
   autoburnin = FALSE
 )
