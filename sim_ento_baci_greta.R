@@ -309,7 +309,7 @@ baci_model <- model(
   study_avg_wt
 )
 
-# plot(baci_model)
+ plot(baci_model)
 
 # # 
 # inits <- initials(
@@ -369,7 +369,6 @@ log_weights_sim <- calculate(
   values = draws,
   nsim = 100
 )
-
 
 library(DHARMa)
 resids <- createDHARMa(
