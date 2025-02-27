@@ -6,7 +6,7 @@ n_intervention <- 51
 n_non_intervention <- n_sites - n_intervention
 
 lambda <- 29
-reduction_multiplier <- 0.45
+reduction_multiplier <- 0.45 # percent reduction factor is 55%
 
 lambda_intervention <- lambda*reduction_multiplier
 
